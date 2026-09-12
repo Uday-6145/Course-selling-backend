@@ -24,6 +24,5 @@ Node.js, Express.js, MongoDB, Mongoose
 git clone https://github.com/Uday-6145/Course-selling-backend.git
 cd Course-selling-backend
 npm install
-# create a .env file with MONGO_URI=<your-connection-string>
 node index.js
-\`\`\`
+
