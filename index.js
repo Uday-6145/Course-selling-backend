@@ -2,6 +2,7 @@ const express = require('express')
 const userRouter = require('./routes/user');
 const courseRouter = require('./routes/course');
 const adminRouter = require('./routes/admin')
+require('dotenv').config()
 
 const mongoose = require('mongoose')
 //create an instance
@@ -13,7 +14,7 @@ app.use('/admin', adminRouter)
 
 
 const main = async() => {
-    await mongoose.connect('mongodb+srv://udaypratap6145_db_user:lKyiAGB82DpnTdWZ@cluster0.9h1n5nr.mongodb.net/coursera-app')
+    await mongoose.connect(process.env.MONGO_URI)
     app.listen(3000)
     console.log("Listening on port 3000")
 }
