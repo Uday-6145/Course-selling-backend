@@ -47,7 +47,7 @@ adminRouter.post('/signin', async(req, res)=> {
 })
 
 adminRouter.post('/course', adminMiddleware, async(req, res)=> {
-    const adminId = req.adminId
+    const adminId = req.adminId // this we are getting from the middleware..
 
 
     const {title, description, imageUrl, price} = req.body;
@@ -63,11 +63,12 @@ adminRouter.post('/course', adminMiddleware, async(req, res)=> {
 })
 
 adminRouter.put('/course', adminMiddleware,  async(req, res)=> {
-    const adminId = req.adminId
+    const adminId = req.adminId // this we are getting from the middleware..
 
     const {title, description, imageUrl, price, courseId} = req.body;
     const course = await CourseModel.updateOne({
-        _id: courseId
+        _id: courseId,
+        creatorId: adminId // this line is important because it ensure's that no creator can update the data of other creator except themself;
     },{
         title, description, imageUrl, price
     })
@@ -77,8 +78,15 @@ adminRouter.put('/course', adminMiddleware,  async(req, res)=> {
     })
 })
 
-adminRouter.get('/course/bulk', (req, res)=> {
-    res.send("give all the courses that admin has created")
+adminRouter.get('/course/bulk', adminMiddleware, async(req, res)=> {
+    const adminId = req.adminId;
+
+
+    const courses = await CourseModel.find({
+        creatorId: adminId
+    })
+
+    res.json(courses);
 })
 
 
