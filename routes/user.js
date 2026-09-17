@@ -1,5 +1,5 @@
 const {Router} = require('express')
-const {UserModel, PurchaseModel, CourseModel} = require('../db.js')
+const {UserModel} = require('./models/userModel.js')
 const userRouter = Router();
 const jwt = require('jsonwebtoken'); 
 const userMiddleware = require('../middleware/user.js');
@@ -49,10 +49,14 @@ const userMiddleware = require('../middleware/user.js');
     userRouter.get('/purchases', userMiddleware, async(req, res)=> {
         const userId = req.userId;
 
+        // here purchases becomes an array of object
         const purchases = await PurchaseModel.find({
             userId
         })
 
+
+        // yhe mujhe thodi or infomation provide karege
+        // yaha pr ham voh courses dekh rahe hai jiski id hamare purchases mai jo id's hai unnse match karti hoo...
         const courseData = await CourseModel.find({
             _id: {$in : purchases.map((x)=> x.courseId)}
         })
