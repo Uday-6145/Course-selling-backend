@@ -1,4 +1,4 @@
-# Course Selling Backend (In Progress)
+# Course Selling Backend
 
 A Node.js + Express + MongoDB backend for an online course-selling platform. 
 Core schema design and route structure are in place; business logic is 
