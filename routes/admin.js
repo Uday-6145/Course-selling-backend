@@ -3,7 +3,7 @@ const {AdminModel} = require('../db')
 const {CourseModel} = require('../db')
 const adminRouter = express.Router()
 const jwt = require('jsonwebtoken')
-const adminMiddleware = require('../middleware/admin')
+const adminMiddleware = require('../middleware/adminMiddleware')
 
 adminRouter.post('/signup', async(req, res)=> {
     const {email, password, firstName, lastName} = req.body //TODO: adding zod validation
