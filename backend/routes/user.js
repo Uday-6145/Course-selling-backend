@@ -4,7 +4,7 @@ const userRouter = Router();
 
 
 //this is auth middleware
-const userMiddleware = require('../middleware/user.js');
+const userMiddleware = require('../middleware/userMiddleware');
 
 
 //this is user controller

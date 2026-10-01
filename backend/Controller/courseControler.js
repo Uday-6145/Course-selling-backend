@@ -1,5 +1,5 @@
 const CourseModel = require("../models/courseModel")
-
+const PurchaseModel = require('../models/purchaseModel')
 
 
 //purchase a course

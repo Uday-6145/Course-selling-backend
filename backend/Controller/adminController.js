@@ -1,4 +1,3 @@
-const bcrypt = require('bcrypt')
 const AdminModel = require('../models/adminModel.js')
 const CourseModel = require('../models/courseModel.js')
 const bcrypt = require('bcrypt')
@@ -12,7 +11,7 @@ const adminSignUp = async (req, res) => {
 
     //here we are checking that admin send the data in valid formate through zod
     const schema = zod.object({
-        email: zod.email().string().min(5),
+        email: zod.string().email().min(5),
         password: zod.string().min(6),
         firstname: zod.string().min(3),
         lastname: zod.string().min(3)
@@ -20,7 +19,7 @@ const adminSignUp = async (req, res) => {
 
     const result = schema.safeParse(req.body)
     if (!result.success) {
-        res.json({
+        return res.json({
             message: "Incorrect data formate",
             error: result.error
         })
@@ -28,7 +27,7 @@ const adminSignUp = async (req, res) => {
 
 
 
-    const hashedPassword = bcrypt.hash(password, 10)
+    const hashedPassword = await bcrypt.hash(password, 10)
 
     try {
         // first time admin created
@@ -42,7 +41,7 @@ const adminSignUp = async (req, res) => {
         res.status(201).send("Signup successful!")
     }
     catch (err) {
-        res.status(400).json("Admin already exists!")
+        return res.status(400).json("Admin already exists!")
     }
 }
 
@@ -51,14 +50,14 @@ const adminSignIn = async (req, res) => {
     const { email, password } = req.body;
 
     const schema = zod.object({
-        email: zod.email().string(),
+        email: zod.string().email(),
         password: zod.string().min(6)
     })
 
     const result = schema.safeParse(req.body)
 
     if (!result.success) {
-        res.json({
+        return res.json({
             message: "Incorrect data formate",
             error: result.error
         })
@@ -69,7 +68,7 @@ const adminSignIn = async (req, res) => {
     })
 
     if (!admin) {
-        res.status(403).json({
+        return res.status(403).json({
             message: "Invalid Credential!!"
         })
     }
@@ -95,13 +94,13 @@ const createCourses = async (req, res) => {
     const schema = zod.object({
         title: zod.string().min(3),
         description: zod.string().min(10),
-        imageUrl: zod.url().string(),
+        imageUrl: zod.string().url(),
         price: zod.number().positive()
     })
 
     const result = schema.safeParse(req.body)
     if (!result.success) {
-        res.json({
+        return res.json({
             message: "Incorrect data formate",
             error: result.error
         })
@@ -128,12 +127,12 @@ const updateCourse = async (req, res) => {
         courseId: zod.string().min(5),
         title: zod.string().min(3).optional(),
         description: zod.string().min(5).optional(),
-        imageUrl: zod.url().string().optional(),
+        imageUrl: zod.string().url().optional(),
         price: zod.number().positive().optional(),
     })
     const result = schema.safeParse(req.body);
     if (!result.success) {
-        res.json({
+        return res.json({
             message: "Incorrect data formate",
             error: result.error
         })
@@ -147,7 +146,7 @@ const updateCourse = async (req, res) => {
     })
 
     if (!course) {
-        res.status(404).json({ message: "Course not found!" });
+        return res.status(404).json({ message: "Course not found!" });
     }
 
     await CourseModel.updateOne({ _id: courseId, creatorId: req.adminId }, {

@@ -1,9 +1,10 @@
-const courseRouter = Router();
+
 const { Router } = require('express')
+const courseRouter = Router();
 
 
 // user auth middleware
-const userMiddleware = require('../middleware/user')
+const userMiddleware = require('../middleware/userMiddleware')
 
 
 

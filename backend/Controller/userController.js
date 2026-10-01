@@ -1,6 +1,6 @@
 const PurchaseModel = require('../models/purchaseModel')
-const { UserModel } = require('../models/userModel')
-const { CourseModel } = require('..models/courseModel')
+const UserModel = require('../models/userModel')
+const CourseModel = require('../models/courseModel')
 const zod = require('zod')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
@@ -12,7 +12,7 @@ const userSignUp = async (req, res) => {
 
     //here we are checking that admin send the data in valid formate through zod
     const schema = zod.object({
-        email: zod.email().string().min(5),
+        email: zod.string().email().min(5),
         password: zod.string().min(6),
         firstname: zod.string().min(3),
         lastname: zod.string().min(3)
@@ -20,7 +20,7 @@ const userSignUp = async (req, res) => {
 
     const result = schema.safeParse(req.body)
     if (!result.success) {
-        res.json({
+        return res.json({
             message: "Incorrect data formate",
             error: result.error
         })
@@ -28,7 +28,7 @@ const userSignUp = async (req, res) => {
 
 
 
-    const hashedPassword = bcrypt.hash(password, 10)
+    const hashedPassword = await bcrypt.hash(password, 10)
 
     try {
         // first time user created
@@ -51,18 +51,19 @@ const userSignIn = async (req, res) => {
     const { email, password } = req.body;
 
     const schema = zod.object({
-        email: zod.email().string(),
+        email: zod.string().email(),
         password: zod.string().min(6)
     })
 
     const result = schema.safeParse(req.body)
 
     if (!result.success) {
-        res.json({
+        return res.json({
             message: "Incorrect data formate",
             error: result.error
         })
     }
+
 
     const user = await UserModel.findOne({
         email: email
