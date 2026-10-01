@@ -6,20 +6,20 @@ const zod = require('zod')
 const jwt = require('jsonwebtoken')
 
 
-const adminSignUp = async(req, res) => {
-    const {email, password, firstname, lastname} = req.body
+const adminSignUp = async (req, res) => {
+    const { email, password, firstname, lastname } = req.body
 
 
     //here we are checking that admin send the data in valid formate through zod
     const schema = zod.object({
         email: zod.email().string().min(5),
         password: zod.string().min(6),
-        firstname:zod.string().min(3),
+        firstname: zod.string().min(3),
         lastname: zod.string().min(3)
     })
 
     const result = schema.safeParse(req.body)
-    if(!result.success){
+    if (!result.success) {
         res.json({
             message: "Incorrect data formate",
             error: result.error
@@ -30,7 +30,7 @@ const adminSignUp = async(req, res) => {
 
     const hashedPassword = bcrypt.hash(password, 10)
 
-    try{
+    try {
         // first time admin created
         await AdminModel.create({
             email,
@@ -41,14 +41,14 @@ const adminSignUp = async(req, res) => {
 
         res.status(201).send("Signup successful!")
     }
-    catch(err){
+    catch (err) {
         res.status(400).json("Admin already exists!")
     }
 }
 
 
-const adminSignIn = async(req, res) => {
-    const {email, password} = req.body;
+const adminSignIn = async (req, res) => {
+    const { email, password } = req.body;
 
     const schema = zod.object({
         email: zod.email().string(),
@@ -57,7 +57,7 @@ const adminSignIn = async(req, res) => {
 
     const result = schema.safeParse(req.body)
 
-    if(!result.success){
+    if (!result.success) {
         res.json({
             message: "Incorrect data formate",
             error: result.error
@@ -68,7 +68,7 @@ const adminSignIn = async(req, res) => {
         email: email
     })
 
-    if(!admin){
+    if (!admin) {
         res.status(403).json({
             message: "Invalid Credential!!"
         })
@@ -76,11 +76,11 @@ const adminSignIn = async(req, res) => {
 
     const isPasswordMatch = await bcrypt.compare(password, admin.password);
 
-    if(isPasswordMatch){
-        const token = jwt.sign({id: admin._id}, process.env.JWT_ADMIN_SECRET)
-        res.status(200).json({token: token})
+    if (isPasswordMatch) {
+        const token = jwt.sign({ id: admin._id }, process.env.JWT_ADMIN_SECRET)
+        res.status(200).json({ token: token })
     }
-    else{
+    else {
         res.status(403).json({ message: "Invalid Credentials!" });
     }
 
@@ -89,8 +89,8 @@ const adminSignIn = async(req, res) => {
 }
 
 
-const createCourses = async(req, res) => {
-    const {title, description, imageUrl, price} = req.body;
+const createCourses = async (req, res) => {
+    const { title, description, imageUrl, price } = req.body;
 
     const schema = zod.object({
         title: zod.string().min(3),
@@ -100,7 +100,7 @@ const createCourses = async(req, res) => {
     })
 
     const result = schema.safeParse(req.body)
-    if(!result.success){
+    if (!result.success) {
         res.json({
             message: "Incorrect data formate",
             error: result.error
@@ -121,7 +121,7 @@ const createCourses = async(req, res) => {
 }
 
 
-const updateCourse = async(req, res) => {
+const updateCourse = async (req, res) => {
     const { courseId, title, description, imageUrl, price } = req.body;
 
     const schema = zod.object({
@@ -132,7 +132,7 @@ const updateCourse = async(req, res) => {
         price: zod.number().positive().optional(),
     })
     const result = schema.safeParse(req.body);
-    if(!result.success){
+    if (!result.success) {
         res.json({
             message: "Incorrect data formate",
             error: result.error
@@ -146,15 +146,15 @@ const updateCourse = async(req, res) => {
         creatorId: req.adminId
     })
 
-    if(!course){
+    if (!course) {
         res.status(404).json({ message: "Course not found!" });
     }
 
-    await CourseModel.updateOne({_id: courseId, creatorId: req.adminId}, {
-            title: title || course.title,
-            description: description || course.description,
-            imageUrl: imageUrl || course.imageUrl,
-            price: price || course.price,
+    await CourseModel.updateOne({ _id: courseId, creatorId: req.adminId }, {
+        title: title || course.title,
+        description: description || course.description,
+        imageUrl: imageUrl || course.imageUrl,
+        price: price || course.price,
     })
 
     res.status(200).json({ message: "Course updated!" });
@@ -162,8 +162,8 @@ const updateCourse = async(req, res) => {
 }
 
 
-const deleteCourse = async(req, res) => {
-    const {courseId} = req.body;
+const deleteCourse = async (req, res) => {
+    const { courseId } = req.body;
 
     const schema = zod.object({
         courseId: zod.string().min(5)
@@ -187,11 +187,11 @@ const deleteCourse = async(req, res) => {
 
 }
 
-const getAllCourses = async(req, res) => {
+const getAllCourses = async (req, res) => {
     const courses = await CourseModel.find({ creatorId: req.adminId });
     res.status(200).json({ courses });
 }
 
 module.exports = {
-    adminSignUp, adminSignIn, createCourses, getAllCourses,  updateCourse, deleteCourse
+    adminSignUp, adminSignIn, createCourses, getAllCourses, updateCourse, deleteCourse
 }
