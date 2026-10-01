@@ -1,32 +1,21 @@
-const {Router} = require('express')
-const userMiddleware = require('../middleware/user')
-const {PurchaseModel, CourseModel} = require('../db.js')
 const courseRouter = Router();
+const { Router } = require('express')
 
 
-courseRouter.post('/purchase', userMiddleware, async(req, res)=> {
-    const userId = req.userId;
+// user auth middleware
+const userMiddleware = require('../middleware/user')
 
-    const courseId = req.body.courseId;
 
-    await  PurchaseModel.create({
-        userId,
-        courseId
-    })
 
-    res.json({
-        message: "You have successfully purchased the course!!!!!"
-    }) 
-})
+//main course logic
+const courseController = require('../Controller/courseControler.js')
+
+
+courseRouter.post('/purchase', userMiddleware, courseController.purchaseCourse)
 
 // courses toh dikhne chiye user ko, So this not need to be authenticated
-courseRouter.get('/preview', async(req, res)=> {
-    const courses = await CourseModel.find({})
+courseRouter.get('/preview', courseController.previewCourse)
 
 
-    res.json({courses})
-})
-
- 
-module.exports =  courseRouter
+module.exports = courseRouter
 
