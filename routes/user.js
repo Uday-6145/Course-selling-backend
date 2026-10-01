@@ -1,69 +1,23 @@
-const {Router} = require('express')
-const {UserModel} = require('./models/userModel.js')
+//here we created a user route
+const { Router } = require('express')
 const userRouter = Router();
-const jwt = require('jsonwebtoken'); 
+
+
+//this is auth middleware
 const userMiddleware = require('../middleware/user.js');
 
 
-    userRouter.post('/signup', async(req, res)=> {
-        const {email, password, firstName, lastName} = req.body //TODO: adding zod validation
-        //TODO: hash the password so plain text password not stored in db.
-
-        //TODO: Put inside a try catch block
-        await UserModel.create({
-            email: email,
-            password : password,
-            firstName: firstName,
-            lastName: lastName
-        })
-
-        res.json("SignUp Succedded")
-    })
-    
-    userRouter.post('/signin', async(req, res)=> {
-
-        const {email, password} = req.body
-        //TODO: ideally password should be hashed hence you cant compare user provided provided
-        const user = await UserModel.findOne({
-            email: email,
-            password: password
-        })
-
-        if(user){
-            const token = jwt.sign({
-                id: user._id
-            }, process.env.JWT_USER_SECRET)
-
-            res.json({
-                token: token
-            })
-        }
-        else{
-            res.status(403).json({
-                message: "Incorrect credential!!!"
-            })
-        }
-
-    })
-
-    userRouter.get('/purchases', userMiddleware, async(req, res)=> {
-        const userId = req.userId;
-
-        // here purchases becomes an array of object
-        const purchases = await PurchaseModel.find({
-            userId
-        })
+//this is user controller
+const userController = require('../Controller/userController.js')
 
 
-        // yhe mujhe thodi or infomation provide karege
-        // yaha pr ham voh courses dekh rahe hai jiski id hamare purchases mai jo id's hai unnse match karti hoo...
-        const courseData = await CourseModel.find({
-            _id: {$in : purchases.map((x)=> x.courseId)}
-        })
 
+//these are routes endpoint
+userRouter.post('/signup', userController.userSignUp)
 
-        res.json({purchases, courseData})
-    })
+userRouter.post('/signin', userController.userSignIn)
+
+userRouter.get('/purchases', userMiddleware, userController.getUserPurchases)
 
 
 module.exports = userRouter;

@@ -1,22 +1,25 @@
 const PurchaseModel = require('../models/purchaseModel')
-const {UserModel} = require('../models/userModel.js')
+const { UserModel } = require('../models/userModel')
+const { CourseModel } = require('..models/courseModel')
+const zod = require('zod')
+const bcrypt = require('bcrypt')
+const jwt = require('jsonwebtoken')
 
 
-
-const userSignUp = async(req, res) => {
-    const {email, password, firstname, lastname} = req.body
+const userSignUp = async (req, res) => {
+    const { email, password, firstname, lastname } = req.body
 
 
     //here we are checking that admin send the data in valid formate through zod
     const schema = zod.object({
         email: zod.email().string().min(5),
         password: zod.string().min(6),
-        firstname:zod.string().min(3),
+        firstname: zod.string().min(3),
         lastname: zod.string().min(3)
     })
 
     const result = schema.safeParse(req.body)
-    if(!result.success){
+    if (!result.success) {
         res.json({
             message: "Incorrect data formate",
             error: result.error
@@ -27,7 +30,7 @@ const userSignUp = async(req, res) => {
 
     const hashedPassword = bcrypt.hash(password, 10)
 
-    try{
+    try {
         // first time user created
         await UserModel.create({
             email,
@@ -38,14 +41,14 @@ const userSignUp = async(req, res) => {
 
         res.status(201).send("Signup successful!")
     }
-    catch(err){
+    catch (err) {
         res.status(400).json("user already exists!")
     }
 }
 
 
-const userSignIn = async(req, res) => {
-    const {email, password} = req.body;
+const userSignIn = async (req, res) => {
+    const { email, password } = req.body;
 
     const schema = zod.object({
         email: zod.email().string(),
@@ -54,7 +57,7 @@ const userSignIn = async(req, res) => {
 
     const result = schema.safeParse(req.body)
 
-    if(!result.success){
+    if (!result.success) {
         res.json({
             message: "Incorrect data formate",
             error: result.error
@@ -65,7 +68,7 @@ const userSignIn = async(req, res) => {
         email: email
     })
 
-    if(!user){
+    if (!user) {
         res.status(403).json({
             message: "Invalid Credential!!"
         })
@@ -73,11 +76,11 @@ const userSignIn = async(req, res) => {
 
     const isPasswordMatch = await bcrypt.compare(password, user.password);
 
-    if(isPasswordMatch){
-        const token = jwt.sign({id: user._id}, process.env.JWT_USER_SECRET)
-        res.status(200).json({token: token})
+    if (isPasswordMatch) {
+        const token = jwt.sign({ id: user._id }, process.env.JWT_USER_SECRET)
+        res.status(200).json({ token: token })
     }
-    else{
+    else {
         res.status(403).json({ message: "Invalid Credentials!" });
     }
 
@@ -86,10 +89,11 @@ const userSignIn = async(req, res) => {
 }
 
 
-const getUserPurchases = async(req, res) => {
-    const userId = req.body
+const getUserPurchases = async (req, res) => {
+    //yeh userMiddleware se aaya
+    const userId = req.userId;
 
-    if(!userId){
+    if (!userId) {
         res.status(401).json({
             message: "Unauthorized access"
         })
@@ -99,11 +103,27 @@ const getUserPurchases = async(req, res) => {
         userId
     })
 
-    if(!purchases.length){
+    if (!purchases.length) {
         res.status(404).json({
             message: "No purchases found",
         })
     }
 
-    
-}   
+    const purchasesCourseId = purchases.map((eachPurchase) => eachPurchase.id);
+    const courseData = await CourseModel.find({
+        _id: { $in: purchasesCourseId }
+    })
+
+    res.status(200).json({
+        courses: courseData,
+        purchases
+    })
+
+}
+
+
+
+
+module.exports = {
+    userSignIn, userSignUp, getUserPurchases
+}

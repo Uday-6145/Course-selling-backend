@@ -1,15 +1,15 @@
 const jwt = require('jsonwebtoken')
 
 const userMiddleware = (req, res, next) => {
-    const token  = req.headers.token
+    const token = req.headers.token
 
     const decoded = jwt.verify(token, process.env.JWT_USER_SECRET)
 
-    if(decoded){
+    if (decoded) {
         req.userId = decoded.id;
         next()
     }
-    else{
+    else {
         res.status(403).json({
             message: "You are not signed in"
         })
@@ -17,4 +17,4 @@ const userMiddleware = (req, res, next) => {
 }
 
 
-module.exports  = userMiddleware
+module.exports = userMiddleware
