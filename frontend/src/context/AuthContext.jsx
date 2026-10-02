@@ -1,105 +1,74 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getUserPurchases } from '../api/client';
+import { getUserPurchases } from '../api';
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const [userToken, setUserToken] = useState(() => localStorage.getItem('codex_user_token') || null);
-  const [adminToken, setAdminToken] = useState(() => localStorage.getItem('codex_admin_token') || null);
-  const [userProfile, setUserProfile] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('codex_user_profile')) || null;
-    } catch {
-      return null;
-    }
-  });
-  const [adminProfile, setAdminProfile] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('codex_admin_profile')) || null;
-    } catch {
-      return null;
-    }
-  });
+  // Lazy state initialization: runs localStorage.getItem only ONCE on mount,
+  // not on every single re-render of the component
+  const [userToken, setUserToken] = useState(() => localStorage.getItem('userToken'));
+  const [adminToken, setAdminToken] = useState(() => localStorage.getItem('adminToken'));
+
+  // Active role determines whether the user is browsing as a student or as an admin
   const [activeRole, setActiveRole] = useState(() => {
-    return localStorage.getItem('codex_active_role') || 'student';
+    if (localStorage.getItem('adminToken')) return 'admin';
+    if (localStorage.getItem('userToken')) return 'user';
+    return null;
   });
 
-  const [purchasedCourseIds, setPurchasedCourseIds] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('codex_purchased_ids')) || [];
-    } catch {
-      return [];
-    }
-  });
+  // Array of course IDs purchased by the student
+  const [purchasedCourseIds, setPurchasedCourseIds] = useState([]);
 
-  useEffect(() => {
-    localStorage.setItem('codex_active_role', activeRole);
-  }, [activeRole]);
-
-  // Sync purchases from backend when userToken changes
+  // Function to refresh purchased courses from backend
   const refreshPurchases = async () => {
-    if (!userToken) return;
-    const res = await getUserPurchases(userToken);
-    if (res.success && res.courses) {
-      const ids = res.courses.map((c) => c._id || c.id);
-      setPurchasedCourseIds((prev) => {
-        const combined = Array.from(new Set([...prev, ...ids]));
-        localStorage.setItem('codex_purchased_ids', JSON.stringify(combined));
-        return combined;
-      });
+    if (!userToken) {
+      setPurchasedCourseIds([]);
+      return;
+    }
+    const res = await getUserPurchases();
+    if (res.success && res.data) {
+      const idsFromCourses = (res.data.courses || []).map((c) => c._id);
+      const idsFromPurchases = (res.data.purchases || []).map((p) => p.courseId);
+      const allIds = Array.from(new Set([...idsFromCourses, ...idsFromPurchases]));
+      setPurchasedCourseIds(allIds);
     }
   };
 
+  // Fetch purchases whenever userToken changes (login/logout)
   useEffect(() => {
-    if (userToken) {
-      refreshPurchases();
-    }
+    refreshPurchases();
   }, [userToken]);
 
-  const loginUser = (token, profile) => {
+  // Login as Student
+  const loginUser = (token) => {
+    localStorage.setItem('userToken', token);
     setUserToken(token);
-    setUserProfile(profile);
-    localStorage.setItem('codex_user_token', token);
-    localStorage.setItem('codex_user_profile', JSON.stringify(profile));
+    setActiveRole('user');
   };
 
-  const logoutUser = () => {
-    setUserToken(null);
-    setUserProfile(null);
-    localStorage.removeItem('codex_user_token');
-    localStorage.removeItem('codex_user_profile');
-    localStorage.removeItem('codex_purchased_ids');
-    setPurchasedCourseIds([]);
-  };
-
-  const loginAdmin = (token, profile) => {
+  // Login as Admin / Creator
+  const loginAdmin = (token) => {
+    localStorage.setItem('adminToken', token);
     setAdminToken(token);
-    setAdminProfile(profile);
-    localStorage.setItem('codex_admin_token', token);
-    localStorage.setItem('codex_admin_profile', JSON.stringify(profile));
     setActiveRole('admin');
   };
 
-  const logoutAdmin = () => {
+  // Logout clears all stored tokens and resets state
+  const logout = () => {
+    localStorage.removeItem('userToken');
+    localStorage.removeItem('adminToken');
+    setUserToken(null);
     setAdminToken(null);
-    setAdminProfile(null);
-    localStorage.removeItem('codex_admin_token');
-    localStorage.removeItem('codex_admin_profile');
-    if (activeRole === 'admin') {
-      setActiveRole('student');
-    }
+    setActiveRole(null);
+    setPurchasedCourseIds([]);
   };
 
+  // Helper function: check if a course is already purchased
+  const isPurchased = (courseId) => purchasedCourseIds.includes(courseId);
+
+  // Optimistically add course ID to purchased list immediately after successful checkout
   const markPurchased = (courseId) => {
-    setPurchasedCourseIds((prev) => {
-      const next = Array.from(new Set([...prev, courseId]));
-      localStorage.setItem('codex_purchased_ids', JSON.stringify(next));
-      return next;
-    });
-  };
-
-  const isPurchased = (courseId) => {
-    return purchasedCourseIds.includes(courseId);
+    setPurchasedCourseIds((prev) => [...prev, courseId]);
   };
 
   return (
@@ -107,18 +76,16 @@ export function AuthProvider({ children }) {
       value={{
         userToken,
         adminToken,
-        userProfile,
-        adminProfile,
         activeRole,
         setActiveRole,
-        loginUser,
-        logoutUser,
-        loginAdmin,
-        logoutAdmin,
+        isLoggedIn: Boolean(userToken || adminToken),
         purchasedCourseIds,
-        markPurchased,
         isPurchased,
+        markPurchased,
         refreshPurchases,
+        loginUser,
+        loginAdmin,
+        logout,
       }}
     >
       {children}
@@ -126,6 +93,7 @@ export function AuthProvider({ children }) {
   );
 }
 
+// Custom hook to consume AuthContext in any component
 export function useAuth() {
   return useContext(AuthContext);
 }

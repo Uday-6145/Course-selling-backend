@@ -9,7 +9,7 @@ const purchaseCourse = async (req, res) => {
     const courseId = req.body.courseId;
 
     if (!courseId) {
-        res.status(400).json({
+        return res.status(400).json({
             message: "Please provide a courseId",
         });
     }

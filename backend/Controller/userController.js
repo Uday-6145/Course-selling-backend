@@ -95,31 +95,39 @@ const getUserPurchases = async (req, res) => {
     const userId = req.userId;
 
     if (!userId) {
-        res.status(401).json({
+        return res.status(401).json({
             message: "Unauthorized access"
-        })
+        });
     }
 
-    const purchases = await PurchaseModel.find({
-        userId
-    })
+    try {
+        const purchases = await PurchaseModel.find({
+            userId
+        });
 
-    if (!purchases.length) {
-        res.status(404).json({
-            message: "No purchases found",
-        })
+        if (!purchases || !purchases.length) {
+            return res.status(200).json({
+                courses: [],
+                purchases: []
+            });
+        }
+
+        // Must use courseId (not id) to match CourseModel _id
+        const purchasesCourseId = purchases.map((eachPurchase) => eachPurchase.courseId);
+        const courseData = await CourseModel.find({
+            _id: { $in: purchasesCourseId }
+        });
+
+        return res.status(200).json({
+            courses: courseData,
+            purchases
+        });
+    } catch (err) {
+        return res.status(500).json({
+            message: "Error fetching purchases",
+            error: err.message
+        });
     }
-
-    const purchasesCourseId = purchases.map((eachPurchase) => eachPurchase.id);
-    const courseData = await CourseModel.find({
-        _id: { $in: purchasesCourseId }
-    })
-
-    res.status(200).json({
-        courses: courseData,
-        purchases
-    })
-
 }
 
 

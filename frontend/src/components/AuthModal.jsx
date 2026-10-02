@@ -1,298 +1,234 @@
 import React, { useState } from 'react';
-import { X, Lock, Mail, User, ShieldCheck, ArrowRight, Sparkles } from 'lucide-react';
-import { userSignUp, userSignIn, adminSignUp, adminSignIn } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { userSignIn, userSignUp, adminSignIn, adminSignUp } from '../api';
 
-export default function AuthModal({ 
-  isOpen, 
-  onClose, 
-  initialRole = 'user', 
-  initialMode = 'signin',
-  onToast 
-}) {
+export default function AuthModal({ initialMode = 'signin', onClose }) {
   const { loginUser, loginAdmin } = useAuth();
 
-  const [role, setRole] = useState(initialRole); // 'user' | 'admin'
-  const [mode, setMode] = useState(initialMode); // 'signin' | 'signup'
+  // Role: 'student' or 'admin'
+  const [role, setRole] = useState('student');
+  // Mode: 'signin' or 'signup'
+  const [mode, setMode] = useState(initialMode);
 
+  // Form input state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstname, setFirstname] = useState('');
   const [lastname, setLastname] = useState('');
-  
+
+  // UI state
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-
-  if (!isOpen) return null;
-
-  const handlePreFill = (selectedRole) => {
-    if (selectedRole === 'admin') {
-      setEmail('creator@codex.internal');
-      setPassword('admin_pass123');
-      setFirstname('Alexander');
-      setLastname('Wright');
-    } else {
-      setEmail('student@codex.dev');
-      setPassword('secure_pass123');
-      setFirstname('Devon');
-      setLastname('Miller');
-    }
-    setErrorMsg('');
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setErrorMsg('');
+    setError(null);
     setLoading(true);
 
     try {
-      if (role === 'user') {
-        if (mode === 'signup') {
-          // User Signup
-          const res = await userSignUp({ email, password, firstname, lastname });
-          if (!res.success) {
-            setErrorMsg(typeof res.message === 'string' ? res.message : 'Signup failed. Please verify fields.');
-            setLoading(false);
-            return;
-          }
-          // After signup, attempt signin automatically
-          const loginRes = await userSignIn({ email, password });
-          if (loginRes.success && loginRes.token) {
-            loginUser(loginRes.token, { email, firstname, lastname });
-            onToast('success', 'Account Created!', `Welcome to Codex, ${firstname}!`);
-            onClose();
+      if (mode === 'signup') {
+        // Simple length validations matching backend
+        if (firstname.trim().length < 3 || lastname.trim().length < 3) {
+          setError('First and last name must be at least 3 characters.');
+          setLoading(false);
+          return;
+        }
+        if (password.length < 6) {
+          setError('Password must be at least 6 characters.');
+          setLoading(false);
+          return;
+        }
+
+        const signupFn = role === 'admin' ? adminSignUp : userSignUp;
+        const res = await signupFn({ email, password, firstname, lastname });
+
+        if (!res.success) {
+          setError(res.error || 'Signup failed');
+          setLoading(false);
+          return;
+        }
+
+        // Auto sign-in after signup
+        const signinFn = role === 'admin' ? adminSignIn : userSignIn;
+        const loginRes = await signinFn({ email, password });
+
+        if (loginRes.success && loginRes.data?.token) {
+          if (role === 'admin') {
+            loginAdmin(loginRes.data.token);
           } else {
-            setMode('signin');
-            onToast('success', 'Account Created!', 'Please sign in with your new credentials.');
+            loginUser(loginRes.data.token);
           }
-        } else {
-          // User Signin
-          const res = await userSignIn({ email, password });
-          if (!res.success || !res.token) {
-            setErrorMsg(res.message || 'Invalid email or password');
-            setLoading(false);
-            return;
-          }
-          loginUser(res.token, { email, firstname: firstname || email.split('@')[0] });
-          onToast('success', 'Welcome back!', 'Signed in as Student.');
           onClose();
+        } else {
+          setMode('signin');
+          setError('Account created! Please sign in with your password.');
         }
       } else {
-        // Admin
-        if (mode === 'signup') {
-          const res = await adminSignUp({ email, password, firstname, lastname });
-          if (!res.success) {
-            setErrorMsg(typeof res.message === 'string' ? res.message : 'Admin registration failed');
-            setLoading(false);
-            return;
-          }
-          const loginRes = await adminSignIn({ email, password });
-          if (loginRes.success && loginRes.token) {
-            loginAdmin(loginRes.token, { email, firstname, lastname });
-            onToast('success', 'Admin Account Created', `Welcome to Creator Studio, ${firstname}!`);
-            onClose();
-          } else {
-            setMode('signin');
-            onToast('success', 'Admin Registered!', 'Please sign in to access Creator Studio.');
-          }
-        } else {
-          // Admin Signin
-          const res = await adminSignIn({ email, password });
-          if (!res.success || !res.token) {
-            setErrorMsg(res.message || 'Invalid admin credentials');
-            setLoading(false);
-            return;
-          }
-          loginAdmin(res.token, { email, firstname: firstname || 'Creator' });
-          onToast('success', 'Creator Studio Active', 'Signed in with Admin permissions.');
-          onClose();
+        // Sign In
+        const signinFn = role === 'admin' ? adminSignIn : userSignIn;
+        const res = await signinFn({ email, password });
+
+        if (!res.success || !res.data?.token) {
+          setError(res.error || 'Invalid email or password');
+          setLoading(false);
+          return;
         }
+
+        if (role === 'admin') {
+          loginAdmin(res.data.token);
+        } else {
+          loginUser(res.data.token);
+        }
+        onClose();
       }
     } catch (err) {
-      setErrorMsg(err.message || 'An unexpected error occurred');
+      setError(err.message || 'An error occurred');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-      <div 
-        className="relative w-full max-w-md bg-dark-900 border border-white/[0.1] rounded-2xl shadow-2xl p-6 sm:p-8 text-left"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 relative">
+        
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.05] transition-colors"
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold"
         >
-          <X className="w-5 h-5" />
+          &times;
         </button>
 
-        {/* Role Segmented Selector */}
-        <div className="flex rounded-xl bg-dark-950 p-1 border border-white/[0.08] mb-6">
+        {/* Role Selection Tabs */}
+        <div className="flex border-b border-gray-200 mb-5">
           <button
             type="button"
-            onClick={() => { setRole('user'); setErrorMsg(''); }}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-              role === 'user'
-                ? 'bg-brand-500 text-white shadow-glow'
-                : 'text-slate-400 hover:text-slate-200'
+            onClick={() => { setRole('student'); setError(null); }}
+            className={`flex-1 py-2 text-sm font-semibold text-center border-b-2 ${
+              role === 'student'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <User className="w-3.5 h-3.5" />
-            <span>Student</span>
+            Student
           </button>
           <button
             type="button"
-            onClick={() => { setRole('admin'); setErrorMsg(''); }}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            onClick={() => { setRole('admin'); setError(null); }}
+            className={`flex-1 py-2 text-sm font-semibold text-center border-b-2 ${
               role === 'admin'
-                ? 'bg-indigo-600 text-white shadow-glow'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'border-purple-600 text-purple-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Instructor / Admin</span>
+            Admin / Creator
           </button>
         </div>
 
-        {/* Modal Title */}
-        <div className="mb-6">
-          <h2 className="text-xl font-bold text-white tracking-tight">
-            {role === 'admin' ? 'Instructor Portal' : 'Student Access'}
+        {/* Heading */}
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-gray-900">
+            {mode === 'signin' ? 'Sign In to CourseApp' : 'Create an Account'}
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            {mode === 'signin' 
-              ? 'Sign in to access your course catalog & purchases' 
-              : 'Create an account to enroll and start building'}
+          <p className="text-xs text-gray-500 mt-1">
+            {role === 'admin' ? 'Manage and create courses' : 'Access your purchased courses'}
           </p>
         </div>
 
-        {/* Error Alert */}
-        {errorMsg && (
-          <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs leading-relaxed">
-            {errorMsg}
+        {/* Error message */}
+        {error && (
+          <div className="bg-red-50 text-red-600 p-2.5 rounded-md text-xs mb-4 border border-red-200">
+            {error}
           </div>
         )}
 
-        {/* Auth Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-3">
           {mode === 'signup' && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1">First Name (min 3)</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input
-                    type="text"
-                    required
-                    minLength={3}
-                    value={firstname}
-                    onChange={(e) => setFirstname(e.target.value)}
-                    placeholder="Arjun"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-dark-950 border border-white/[0.1] text-xs text-white placeholder-slate-600 focus:outline-none focus:border-brand-400"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1">Last Name (min 3)</label>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">First Name</label>
                 <input
                   type="text"
                   required
-                  minLength={3}
+                  placeholder="e.g. Rahul"
+                  value={firstname}
+                  onChange={(e) => setFirstname(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Last Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Sharma"
                   value={lastname}
                   onChange={(e) => setLastname(e.target.value)}
-                  placeholder="Verma"
-                  className="w-full px-3 py-2.5 rounded-xl bg-dark-950 border border-white/[0.1] text-xs text-white placeholder-slate-600 focus:outline-none focus:border-brand-400"
+                  className="w-full border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-mono text-slate-400 mb-1">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="dev@codex.io"
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-dark-950 border border-white/[0.1] text-xs text-white placeholder-slate-600 focus:outline-none focus:border-brand-400"
-              />
-            </div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
+              required
+              placeholder="you@gmail.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:border-blue-500"
+            />
           </div>
 
           <div>
-            <label className="block text-xs font-mono text-slate-400 mb-1">Password (min 6)</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-dark-950 border border-white/[0.1] text-xs text-white placeholder-slate-600 focus:outline-none focus:border-brand-400"
-              />
-            </div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Password</label>
+            <input
+              type="password"
+              required
+              placeholder="At least 6 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:border-blue-500"
+            />
           </div>
 
-          {/* Submit Button */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 rounded-xl bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white text-xs font-semibold shadow-glow transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className={`w-full py-2.5 rounded-md font-semibold text-sm text-white mt-2 ${
+              role === 'admin'
+                ? 'bg-purple-600 hover:bg-purple-700'
+                : 'bg-blue-600 hover:bg-blue-700'
+            } disabled:opacity-50`}
           >
-            {loading ? (
-              <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-            ) : (
-              <>
-                <span>{mode === 'signin' ? 'Sign In to Account' : 'Create Codex Account'}</span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
+            {loading ? 'Please wait...' : mode === 'signin' ? 'Sign In' : 'Register'}
           </button>
-
-          {/* Quick Pre-fill Helper */}
-          <div className="pt-2 text-center">
-            <button
-              type="button"
-              onClick={() => handlePreFill(role)}
-              className="text-[11px] font-mono text-slate-500 hover:text-brand-300 transition-colors inline-flex items-center gap-1"
-            >
-              <Sparkles className="w-3 h-3 text-brand-400" />
-              <span>Fill sample {role === 'admin' ? 'admin' : 'student'} credentials</span>
-            </button>
-          </div>
-
         </form>
 
-        {/* Toggle Mode Footer */}
-        <div className="mt-6 pt-4 border-t border-white/[0.08] text-center">
+        {/* Switch between Signin and Signup */}
+        <div className="mt-4 pt-3 border-t border-gray-100 text-center text-xs text-gray-600">
           {mode === 'signin' ? (
-            <p className="text-xs text-slate-400">
-              Don't have an account yet?{' '}
+            <p>
+              Don't have an account?{' '}
               <button
                 type="button"
-                onClick={() => { setMode('signup'); setErrorMsg(''); }}
-                className="text-brand-400 hover:text-brand-300 font-semibold"
+                onClick={() => { setMode('signup'); setError(null); }}
+                className="text-blue-600 font-semibold hover:underline"
               >
-                Create Account
+                Sign Up
               </button>
             </p>
           ) : (
-            <p className="text-xs text-slate-400">
+            <p>
               Already have an account?{' '}
               <button
                 type="button"
-                onClick={() => { setMode('signin'); setErrorMsg(''); }}
-                className="text-brand-400 hover:text-brand-300 font-semibold"
+                onClick={() => { setMode('signin'); setError(null); }}
+                className="text-blue-600 font-semibold hover:underline"
               >
                 Sign In
               </button>

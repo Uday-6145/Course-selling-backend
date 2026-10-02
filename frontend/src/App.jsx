@@ -1,398 +1,232 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
-import Hero from './components/Hero';
 import CourseCard from './components/CourseCard';
 import CourseModal from './components/CourseModal';
 import AuthModal from './components/AuthModal';
-import PurchasesView from './components/PurchasesView';
-import AdminStudio from './components/AdminStudio';
-import Toast from './components/Toast';
+import AdminPanel from './components/AdminPanel';
+import Footer from './components/Footer';
 import { useAuth } from './context/AuthContext';
-import { fetchCoursePreview, purchaseCourse } from './api/client';
-import { DEFAULT_COURSES } from './data/defaultCourses';
-import { Terminal, Shield, Sparkles, Code, Cpu, Server, GitFork, BookOpen } from 'lucide-react';
+import { fetchCoursePreview, purchaseCourse } from './api';
 
-const CATEGORIES = [
-  'All Specializations',
-  'Backend & Systems',
-  'Cloud & DevOps',
-  'Fullstack',
-  'AI Engineering',
-];
+const CATEGORIES = ['All', 'Web Development', 'Data Structures', 'Backend', 'System Design'];
 
 export default function App() {
-  const { 
-    userToken, 
-    activeRole, 
-    markPurchased, 
-    isPurchased,
-    refreshPurchases 
-  } = useAuth();
+  const [activeTab, setActiveTab] = useState('catalog'); // 'catalog' | 'purchases' | 'admin'
+  const [authModalState, setAuthModalState] = useState(null); // 'signin' | 'signup' | null
+  const [selectedCourse, setSelectedCourse] = useState(null); // Course currently open in detail modal
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState(null);
 
-  // Tab navigation
-  const [currentTab, setCurrentTab] = useState('catalog'); // 'catalog' | 'purchases' | 'admin'
+  // Search and Category Filter state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
 
-  // Courses state
-  const [courses, setCourses] = useState(DEFAULT_COURSES);
-  const [loadingCourses, setLoadingCourses] = useState(true);
-  const [backendStatus, setBackendStatus] = useState({ online: false, message: 'Checking backend...' });
+  const { activeRole, isLoggedIn, isPurchased, markPurchased } = useAuth();
 
-  // Filtering & Search
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All Specializations');
-
-  // Modals & Drawers
-  const [selectedCourse, setSelectedCourse] = useState(null);
-  const [authModalConfig, setAuthModalConfig] = useState({
-    isOpen: false,
-    role: 'user',
-    mode: 'signin',
-  });
-  const [isPurchasing, setIsPurchasing] = useState(false);
-
-  // Toasts
-  const [toasts, setToasts] = useState([]);
-
-  const addToast = (type, title, message) => {
-    const id = Date.now().toString() + Math.random().toString().substring(2, 6);
-    setToasts((prev) => [...prev, { id, type, title, message }]);
-    setTimeout(() => {
-      removeToast(id);
-    }, 4500);
-  };
-
-  const removeToast = (id) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  // Check backend health and fetch courses
+  // Load courses from backend API
   const loadCourses = async () => {
-    setLoadingCourses(true);
+    setLoading(true);
     const res = await fetchCoursePreview();
-    if (res.success && Array.isArray(res.courses)) {
-      setBackendStatus({
-        online: true,
-        message: 'Connected to Node/Express backend at localhost:3000',
-      });
-
-      if (res.courses.length > 0) {
-        // Merge backend courses with rich default metadata
-        const backendCourses = res.courses.map((bc) => ({
-          ...bc,
-          category: bc.category || 'Backend & Systems',
-          level: bc.level || 'Production Grade',
-          duration: bc.duration || '20+ hours',
-          instructor: bc.instructor || {
-            name: 'Staff Architect',
-            role: 'Senior Engineering Contributor',
-            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-          },
-        }));
-
-        // Combine backend courses with defaults so the catalog is always rich
-        const combined = [...backendCourses];
-        DEFAULT_COURSES.forEach((dc) => {
-          if (!combined.some((c) => (c._id || c.id) === (dc._id || dc.id))) {
-            combined.push(dc);
-          }
-        });
-        setCourses(combined);
-      } else {
-        // Backend DB is reachable but currently empty
-        setCourses(DEFAULT_COURSES);
-      }
-    } else {
-      setBackendStatus({
-        online: false,
-        message: 'Backend server not detected on port 3000. Operating in demo mode.',
-      });
-      setCourses(DEFAULT_COURSES);
+    if (res.success && res.data.courses) {
+      setCourses(res.data.courses);
     }
-    setLoadingCourses(false);
+    setLoading(false);
   };
 
   useEffect(() => {
     loadCourses();
   }, []);
 
-  // Filtered courses
-  const filteredCourses = useMemo(() => {
-    return courses.filter((course) => {
-      const matchesSearch =
-        searchQuery === '' ||
-        course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        course.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (course.instructor?.name &&
-          course.instructor.name.toLowerCase().includes(searchQuery.toLowerCase()));
-
-      const matchesCat =
-        selectedCategory === 'All Specializations' ||
-        course.category === selectedCategory;
-
-      return matchesSearch && matchesCat;
-    });
-  }, [courses, searchQuery, selectedCategory]);
-
-  // Open Auth modal helper
-  const handleOpenAuth = (role = 'user', mode = 'signin') => {
-    setAuthModalConfig({
-      isOpen: true,
-      role,
-      mode,
-    });
-  };
-
-  // Purchase Handler
-  const handlePurchase = async (course) => {
-    const courseId = course._id || course.id;
-
-    if (isPurchased(courseId)) {
-      addToast('info', 'Already Enrolled', `You already have lifetime access to "${course.title}".`);
+  // Handle Course Purchase
+  const handleBuy = async (course) => {
+    if (!isLoggedIn) {
+      setAuthModalState('signin');
       return;
     }
 
-    if (!userToken) {
-      addToast('info', 'Student Sign In Required', 'Please sign in or create an account to enroll.');
-      handleOpenAuth('user', 'signin');
+    if (activeRole === 'admin') {
+      alert('You are signed in as an Admin. Please sign in as a Student to purchase courses.');
       return;
     }
 
-    setIsPurchasing(true);
+    const res = await purchaseCourse(course._id);
 
-    try {
-      const res = await purchaseCourse(courseId, userToken);
-      if (res.success) {
-        markPurchased(courseId);
-        addToast(
-          'success',
-          'Enrollment Successful! 🎉',
-          `You now have full access to ${course.title}. Added to "My Learning".`
-        );
-        refreshPurchases();
-        if (selectedCourse) {
-          setSelectedCourse(null);
-        }
-      } else {
-        // If error message indicates already purchased
-        if (res.message && res.message.toLowerCase().includes('already purchased')) {
-          markPurchased(courseId);
-          addToast('info', 'Already Enrolled', res.message);
-        } else {
-          // In demo mode or mock fallback:
-          markPurchased(courseId);
-          addToast('success', 'Enrollment Confirmed!', `Access granted to "${course.title}".`);
-        }
-      }
-    } catch (err) {
-      markPurchased(courseId);
-      addToast('success', 'Enrollment Confirmed!', `Access granted to "${course.title}".`);
-    } finally {
-      setIsPurchasing(false);
+    if (res.success) {
+      markPurchased(course._id);
+      setMessage({ type: 'success', text: `Successfully enrolled in "${course.title}"!` });
+    } else {
+      setMessage({ type: 'error', text: res.error || 'Could not complete purchase' });
     }
+
+    setTimeout(() => setMessage(null), 4000);
   };
+
+  // Filter courses for "My Purchases" tab
+  const purchasedCourses = courses.filter((c) => isPurchased(c._id));
+
+  // Determine the base list based on active tab
+  const baseList = activeTab === 'purchases' ? purchasedCourses : courses;
+
+  // Filter by Search Query & Category
+  const displayedCourses = baseList.filter((course) => {
+    const matchesSearch =
+      course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      course.description.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesCategory =
+      selectedCategory === 'All' ||
+      course.title.toLowerCase().includes(selectedCategory.toLowerCase()) ||
+      course.description.toLowerCase().includes(selectedCategory.toLowerCase());
+
+    return matchesSearch && matchesCategory;
+  });
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#090a0f] text-slate-100 selection:bg-brand-500/30 selection:text-brand-200">
-      
-      {/* Toast Notifications */}
-      <Toast toasts={toasts} onDismiss={removeToast} />
-
-      {/* Main Navbar */}
+    <div className="min-h-screen bg-gray-50 text-gray-900 flex flex-col font-sans">
+      {/* Navigation Bar */}
       <Navbar
-        currentTab={currentTab}
-        setCurrentTab={setCurrentTab}
-        onOpenAuth={handleOpenAuth}
-        backendStatus={backendStatus}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onOpenAuth={(mode) => setAuthModalState(mode)}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1">
-        {currentTab === 'catalog' && (
-          <div>
-            {/* Hero Header */}
-            <Hero
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              selectedCategory={selectedCategory}
-              setSelectedCategory={setSelectedCategory}
-              categories={CATEGORIES}
-              onExploreClick={() => {
-                const el = document.getElementById('catalog-grid');
-                if (el) el.scrollIntoView({ behavior: 'smooth' });
-              }}
-            />
+      {/* Main Container */}
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8">
 
-            {/* Courses Catalog Section */}
-            <section id="catalog-grid" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 text-left">
-                <div>
-                  <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight flex items-center gap-2">
-                    <span>Engineering Curriculum</span>
-                    <span className="text-xs font-mono text-slate-400 px-2 py-0.5 rounded bg-white/[0.04] border border-white/[0.08]">
-                      {filteredCourses.length} {filteredCourses.length === 1 ? 'Course' : 'Courses'}
-                    </span>
-                  </h2>
-                  <p className="text-xs sm:text-sm text-slate-400 mt-1">
-                    Hands-on masterclasses designed to bring you to senior and staff level.
-                  </p>
-                </div>
-
-                {/* Quick stats indicator */}
-                <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
-                  <span className="flex items-center gap-1.5">
-                    <Server className="w-3.5 h-3.5 text-brand-400" />
-                    Distributed Systems
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1.5">
-                    <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-                    Production Scale
-                  </span>
-                </div>
-              </div>
-
-              {/* Grid of Courses */}
-              {filteredCourses.length === 0 ? (
-                <div className="py-16 text-center rounded-2xl border border-white/[0.06] bg-dark-900/40">
-                  <BookOpen className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-                  <p className="text-base font-semibold text-slate-300">No courses match your query</p>
-                  <p className="text-xs text-slate-500 mt-1">Try searching for keywords like "Go", "Next.js", or "Kubernetes"</p>
-                  <button
-                    onClick={() => {
-                      setSearchQuery('');
-                      setSelectedCategory('All Specializations');
-                    }}
-                    className="mt-4 px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs font-medium text-white transition-colors"
-                  >
-                    Reset Filters
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredCourses.map((course) => (
-                    <CourseCard
-                      key={course._id || course.id}
-                      course={course}
-                      onSelect={(c) => setSelectedCourse(c)}
-                      onPurchase={handlePurchase}
-                      isPurchasing={isPurchasing}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
+        {/* Success or Error Notification */}
+        {message && (
+          <div
+            className={`mb-6 p-4 rounded-lg text-sm font-medium flex items-center justify-between shadow-sm ${message.type === 'success'
+                ? 'bg-green-50 text-green-800 border border-green-200'
+                : 'bg-red-50 text-red-800 border border-red-200'
+              }`}
+          >
+            <span>{message.text}</span>
+            <button onClick={() => setMessage(null)} className="font-bold text-lg">&times;</button>
           </div>
         )}
 
-        {currentTab === 'purchases' && (
-          <PurchasesView
-            courses={courses}
-            onSelectCourse={(c) => setSelectedCourse(c)}
-            onExploreCatalog={() => setCurrentTab('catalog')}
-          />
+        {/* Tab 1: Admin Panel */}
+        {activeTab === 'admin' ? (
+          <AdminPanel onCourseCreated={loadCourses} />
+        ) : (
+          <>
+
+
+            {/* Search Bar & Category Filter Bar */}
+            <div className="bg-white border border-gray-200 rounded-xl p-4 mb-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+
+              {/* Search Input */}
+              <div className="w-full md:w-80">
+                <input
+                  type="text"
+                  placeholder="Search courses by keyword..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full border border-gray-300 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-blue-500 bg-gray-50/50"
+                />
+              </div>
+
+              {/* Category Pills */}
+              <div className="flex flex-wrap items-center gap-2">
+                {CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${selectedCategory === cat
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Section Heading */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">
+                {activeTab === 'purchases' ? 'My Enrolled Courses' : 'All Available Courses'}
+              </h2>
+              <span className="text-xs font-medium text-gray-500 bg-gray-200 px-3 py-1 rounded-full">
+                {activeTab === 'purchases' ? `${purchasedCourses.length} Enrolled` : `${displayedCourses.length} Courses`}
+              </span>
+            </div>
+
+            {/* Course Grid */}
+            {loading ? (
+              <div className="text-center py-16 text-gray-500 font-medium">
+                Loading courses...
+              </div>
+            ) : activeTab === 'purchases' && purchasedCourses.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-xl p-12 text-center shadow-sm">
+                <h3 className="text-lg font-bold text-gray-800 mb-2">No courses enrolled yet</h3>
+                <p className="text-sm text-gray-500 mb-5">Browse the catalog to find your next course!</p>
+                <button
+                  onClick={() => setActiveTab('catalog')}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-6 py-2 rounded-full"
+                >
+                  Browse Courses
+                </button>
+              </div>
+            ) : displayedCourses.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-xl p-12 text-center shadow-sm">
+                <h3 className="text-lg font-bold text-gray-800 mb-2">No courses found</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  {searchTerm
+                    ? `No courses matched "${searchTerm}". Try another keyword or clear your search.`
+                    : 'No courses available under this category.'}
+                </p>
+                {searchTerm && (
+                  <button
+                    onClick={() => {
+                      setSearchTerm('');
+                      setSelectedCategory('All');
+                    }}
+                    className="text-xs text-blue-600 font-semibold underline"
+                  >
+                    Clear Search & Filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {displayedCourses.map((course) => (
+                  <CourseCard
+                    key={course._id}
+                    course={course}
+                    onBuy={handleBuy}
+                    onSelect={(c) => setSelectedCourse(c)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
 
-        {currentTab === 'admin' && (
-          <AdminStudio
-            onToast={addToast}
-            onCourseCreatedOrUpdated={loadCourses}
-          />
-        )}
       </main>
 
-      {/* Course Detail / Syllabus Modal */}
+      {/* Footer */}
+      <Footer />
+
+      {/* Course Detail & Learning Modal */}
       {selectedCourse && (
         <CourseModal
           course={selectedCourse}
           onClose={() => setSelectedCourse(null)}
-          onPurchase={handlePurchase}
-          isPurchasing={isPurchasing}
+          onBuy={handleBuy}
         />
       )}
 
-      {/* Authentication Modal */}
-      <AuthModal
-        isOpen={authModalConfig.isOpen}
-        onClose={() => setAuthModalConfig((prev) => ({ ...prev, isOpen: false }))}
-        initialRole={authModalConfig.role}
-        initialMode={authModalConfig.mode}
-        onToast={addToast}
-      />
-
-      {/* Engineering Footer */}
-      <footer className="border-t border-white/[0.08] bg-[#07080b] py-12 mt-16 text-left">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
-            
-            <div className="md:col-span-5 space-y-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-brand-500/20 text-brand-400 border border-brand-500/30 flex items-center justify-center font-bold">
-                  <Terminal className="w-4 h-4" />
-                </div>
-                <span className="font-extrabold text-base tracking-tight text-white">CODEX PLATFORM</span>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed max-w-sm">
-                Production-grade engineering courses built with Express 5, Mongoose, Zod validation, JWT authentication, and React 18.
-              </p>
-              <div className="flex items-center gap-2 pt-2">
-                <span className="text-[11px] font-mono text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
-                  Node v22 & Express 5
-                </span>
-                <span className="text-[11px] font-mono text-cyan-400 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20">
-                  Tailwind CSS
-                </span>
-              </div>
-            </div>
-
-            <div className="md:col-span-3 space-y-2 text-xs">
-              <p className="font-mono text-slate-300 font-semibold uppercase tracking-wider">Endpoints Mapped</p>
-              <ul className="space-y-1.5 text-slate-500 font-mono text-[11px]">
-                <li>POST /user/signup</li>
-                <li>POST /user/signin</li>
-                <li>GET /course/preview</li>
-                <li>POST /course/purchase</li>
-                <li>GET /user/purchases</li>
-                <li>POST /admin/course</li>
-              </ul>
-            </div>
-
-            <div className="md:col-span-4 space-y-2 text-xs">
-              <p className="font-mono text-slate-300 font-semibold uppercase tracking-wider">Quick Actions</p>
-              <div className="flex flex-col gap-2 pt-1">
-                <button
-                  onClick={() => setCurrentTab('catalog')}
-                  className="text-left text-slate-400 hover:text-white transition-colors"
-                >
-                  Explore Course Catalog
-                </button>
-                <button
-                  onClick={() => {
-                    handleOpenAuth('admin', 'signin');
-                  }}
-                  className="text-left text-slate-400 hover:text-white transition-colors"
-                >
-                  Instructor Studio Login
-                </button>
-                <button
-                  onClick={() => {
-                    handleOpenAuth('user', 'signup');
-                  }}
-                  className="text-left text-slate-400 hover:text-white transition-colors"
-                >
-                  Create Student Account
-                </button>
-              </div>
-            </div>
-
-          </div>
-
-          <div className="mt-8 pt-6 border-t border-white/[0.05] flex flex-col sm:flex-row items-center justify-between text-xs text-slate-600 font-mono gap-2">
-            <span>© {new Date().getFullYear()} CODEX — Built for real engineers.</span>
-            <span>All backend code preserved in /backend</span>
-          </div>
-        </div>
-      </footer>
-
+      {/* Auth Modal */}
+      {authModalState && (
+        <AuthModal
+          initialMode={authModalState}
+          onClose={() => setAuthModalState(null)}
+        />
+      )}
     </div>
   );
 }
