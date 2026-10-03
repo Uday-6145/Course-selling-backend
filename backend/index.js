@@ -16,10 +16,19 @@ app.use('/course', courseRouter)
 app.use('/admin', adminRouter)
 
 
+const PORT = process.env.PORT || 3000;
+
 const main = async () => {
-    await mongoose.connect(process.env.MONGO_URI)
-    app.listen(3000)
-    console.log("Listening on port 3000")
+    try {
+        await mongoose.connect(process.env.MONGO_URI);
+        app.listen(PORT, () => {
+            console.log(`Server listening on port ${PORT}`);
+        });
+    } catch (err) {
+        console.error("Failed to connect to MongoDB:", err);
+    }
 }
 main();
+
+module.exports = app;
 
